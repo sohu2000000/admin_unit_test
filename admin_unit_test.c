@@ -93,7 +93,7 @@ static int admin_unit_cmd_list_query(struct pci_dev *pdev,
 	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
 	cmd.result_sg = &out_sg;
 
-	return virtio_admin_cmd_exec(virtio_dev, &cmd);
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 }
 
 static int admin_unit_cmd_list_query_proc(void)
@@ -154,7 +154,7 @@ static int admin_unit_cmd_dev_mode_get(struct pci_dev *pdev,
 	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
 	cmd.result_sg = &out_sg;
 
-	return virtio_admin_cmd_exec(virtio_dev, &cmd);
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 }
 
 static int admin_unit_cmd_dev_mode_get_proc(uint8_t vf_idx)
@@ -223,7 +223,7 @@ static int admin_unit_cmd_dev_mode_set(struct pci_dev *pdev, uint8_t mode)
 	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
 	cmd.data_sg = &in_sg;
 
-	ret = virtio_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 	kfree(in);
 	return ret;
 }
@@ -299,7 +299,7 @@ admin_unit_cmd_dev_ctx_sz_get(struct pci_dev *pdev, uint8_t freeze_mode,
 	cmd.data_sg = &in_sg;
 	cmd.result_sg = &out_sg;
 
-	ret = virtio_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 	kfree(in);
 	return ret;
 }
@@ -372,7 +372,7 @@ admin_unit_cmd_dev_ctx_rd(struct pci_dev *pdev, u8 *buf, int buf_size, int *rd_s
 	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
 	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
 	cmd.result_sg = &out_sg;
-	ret = virtio_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 
 	if (!ret) {
 		memcpy((u8*)&dev_ctx_rd_len,
@@ -484,7 +484,7 @@ admin_unit_cmd_dev_ctx_wr(struct pci_dev *pdev, u8 *buf, int buf_size)
 	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
 	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
 	cmd.data_sg = &in_sg;
-	ret = virtio_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
 
 	return ret;
 }
@@ -492,7 +492,7 @@ admin_unit_cmd_dev_ctx_wr(struct pci_dev *pdev, u8 *buf, int buf_size)
 static int
 admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 {
-	char *str = "Hello Conrtroller, I am godfeng";
+	// char *str = "Hello Conrtroller, I am godfeng";
 	struct pci_dev *vf_pdev;
 	int ret = 0, buf_sz;
 	u8 *buf;
@@ -520,7 +520,7 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 	}
 
 	pr_err("%s:%d: exec dev ctx write \n",__func__, __LINE__);
-	memcpy(buf, str, strlen(str) + 1);
+	// memcpy(buf, str, strlen(str) + 1);
 
 	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
 
