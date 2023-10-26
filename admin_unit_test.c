@@ -36,6 +36,8 @@ static struct proc_dir_entry *admin_unit_dir = NULL;
 MODULE_AUTHOR("Feng Liu <feliu@nvidia.com>");
 MODULE_LICENSE("Dual BSD/GPL");
 
+#define DEP_MOD_NUM	(2)
+
 enum admin_cmd_files {
 	ADMIN_CMD_LIST_QUERY,
 	ADMIN_CMD_MAX
@@ -798,7 +800,18 @@ void admin_unit_prepare_dev(void)
 
 int __init admin_unit_init(void)
 {
+	char * depmods[DEP_MOD_NUM] = {"virtio_pci", "virtio_net"};
 	umode_t mode = 0644;
+	int i, ret;
+
+	for(i = 0; i < DEP_MOD_NUM; i++) {
+		ret = request_module(depmods[i]);
+		if (ret < 0) {
+			pr_err("Failed to load %s: %d\n", depmods[i], ret);
+			return ret;
+		} else
+			pr_info("Loaded %s successfully \n", depmods[i]);
+	}
 
 	admin_unit_dir = proc_mkdir("admin_unit", NULL);
 	if (!admin_unit_dir)
