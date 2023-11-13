@@ -492,40 +492,66 @@ admin_unit_cmd_dev_ctx_wr(struct pci_dev *pdev, u8 *buf, int buf_size)
 }
 
 static int
-admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
+admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx, bool resume)
 {
 	// char *str = "Hello Conrtroller, I am godfeng";
 	struct pci_dev *vf_pdev;
 	int ret = 0, buf_sz;
 	u8 *buf;
 
-	if (vf_idx == 0) {
-		buf = g_dev_mgr.vf1_ctx;
-		if (!buf){
-			pr_err("Should read vf1 dev ctx first");
-			return -EINVAL;
-		}
-		buf_sz = g_dev_mgr.vf1_ctx_sz;
+	if (!resume) {
+		if (vf_idx == 0) {
+			buf = g_dev_mgr.vf1_ctx;
+			if (!buf){
+				pr_err("Should read vf1 dev ctx first");
+				return -EINVAL;
+			}
+			buf_sz = g_dev_mgr.vf1_ctx_sz;
 
-		g_dev_mgr.vf1_ctx = NULL;
-		g_dev_mgr.vf1_ctx_sz = 0;
-	} else {
-		buf = g_dev_mgr.vf0_ctx;
-		if (!buf){
-			pr_err("Should read vf0 dev ctx first");
-			return -EINVAL;
-		}
-		buf_sz = g_dev_mgr.vf0_ctx_sz;
+			g_dev_mgr.vf1_ctx = NULL;
+			g_dev_mgr.vf1_ctx_sz = 0;
+		} else {
+			buf = g_dev_mgr.vf0_ctx;
+			if (!buf){
+				pr_err("Should read vf0 dev ctx first");
+				return -EINVAL;
+			}
+			buf_sz = g_dev_mgr.vf0_ctx_sz;
 
-		g_dev_mgr.vf0_ctx = NULL;
-		g_dev_mgr.vf0_ctx_sz = 0;
+			g_dev_mgr.vf0_ctx = NULL;
+			g_dev_mgr.vf0_ctx_sz = 0;
+		}
+
+		pr_err("%s:%d: exec dev ctx write \n",__func__, __LINE__);
+		// memcpy(buf, str, strlen(str) + 1);
+
+	} else { /* discard resume */
+		if (vf_idx == 0) {
+			buf = g_dev_mgr.vf0_ctx;
+			if (!buf){
+				pr_err("Should read vf0 dev ctx first before resume");
+				return -EINVAL;
+			}
+			buf_sz = g_dev_mgr.vf0_ctx_sz;
+
+			g_dev_mgr.vf0_ctx = NULL;
+			g_dev_mgr.vf0_ctx_sz = 0;
+		} else {
+			buf = g_dev_mgr.vf1_ctx;
+			if (!buf){
+				pr_err("Should read vf1 dev ctx first before resume");
+				return -EINVAL;
+			}
+			buf_sz = g_dev_mgr.vf1_ctx_sz;
+
+			g_dev_mgr.vf1_ctx = NULL;
+			g_dev_mgr.vf1_ctx_sz = 0;
+		}
+
+		pr_err("%s:%d: resume dev ctx write \n",__func__, __LINE__);
 	}
 
-	pr_err("%s:%d: exec dev ctx write \n",__func__, __LINE__);
-	// memcpy(buf, str, strlen(str) + 1);
-
 	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
-
 	ret = admin_unit_cmd_dev_ctx_wr(vf_pdev, buf, buf_sz);
 	if (ret)
 		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
@@ -558,6 +584,8 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 
 #define ADMIN_CMD_DEV_CTX_WR_VF0		"dev_ctx_wr_vf0"
 #define ADMIN_CMD_DEV_CTX_WR_VF1		"dev_ctx_wr_vf1"
+
+#define ADMIN_CMD_DISCARD_VF0			"dev_discard_vf0"
 
 static int admin_unit_cmd_process(const char *buf, int len)
 {
@@ -675,16 +703,23 @@ static int admin_unit_cmd_process(const char *buf, int len)
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_WR_VF0, strlen(ADMIN_CMD_DEV_CTX_WR_VF0))) {
-		ret = admin_unit_cmd_dev_ctx_wr_proc(0);
+		ret = admin_unit_cmd_dev_ctx_wr_proc(0, false);
 		if(ret)
 			pr_err("Failed to run list query %d", ret);
 		return ret;
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_WR_VF1, strlen(ADMIN_CMD_DEV_CTX_WR_VF1))) {
-		ret = admin_unit_cmd_dev_ctx_wr_proc(1);
+		ret = admin_unit_cmd_dev_ctx_wr_proc(1, false);
 		if(ret)
 			pr_err("Failed to run list query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DISCARD_VF0, strlen(ADMIN_CMD_DISCARD_VF0))) {
+		ret = admin_unit_cmd_dev_ctx_wr_proc(0, true);
+		if(ret)
+			pr_err("Failed to discard %d", ret);
 		return ret;
 	}
 
