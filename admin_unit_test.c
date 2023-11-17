@@ -345,13 +345,15 @@ admin_unit_cmd_dev_ctx_sz_get_proc(uint8_t vf_idx, uint8_t freeze_mode)
 }
 
 static int
-admin_unit_cmd_dev_ctx_rd(struct pci_dev *pdev, u8 *buf, int buf_size, int *rd_sz)
+admin_unit_cmd_dev_ctx_rd(struct pci_dev *pdev, u8 *buf, int buf_size,
+			  int *rd_sz, int *remaining_sz)
 {
 	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
-	struct virtio_admin_cmd_dev_ctx_rd_len dev_ctx_rd_len = {};
+	struct virtio_admin_cmd_dev_ctx_rd_result *res = NULL;
 	struct virtio_admin_cmd cmd = {};
-	struct scatterlist out_sg;
-	int ret;
+	struct scatterlist sgs[2];
+	unsigned int sg_buf_size;
+	int ret = 0;
 
 	if (!virtio_dev)
 		return -ENOTCONN;
@@ -368,29 +370,49 @@ admin_unit_cmd_dev_ctx_rd(struct pci_dev *pdev, u8 *buf, int buf_size, int *rd_s
 		dev_name(&virtio_dev->dev),
 		pci_iov_vf_id(pdev));
 
-	sg_init_one(&out_sg, buf, buf_size);
+	res = kzalloc(sizeof(struct virtio_admin_cmd_dev_ctx_rd_result),
+		      GFP_KERNEL);
+	if (!res) {
+		dev_err(&virtio_dev->dev,
+			"Failed to alloc result header size(%lu)\n",
+			sizeof(struct virtio_admin_cmd_dev_ctx_rd_result));
+		return -ENOMEM;
+	}
+
+	/* prepare sgs */
+	sg_init_table(sgs, 2);
+
+	sg_buf_size = sizeof(struct virtio_admin_cmd_dev_ctx_rd_result);
+	sg_set_buf(&sgs[0], res, sg_buf_size);
+
+	sg_buf_size = buf_size;
+	sg_set_buf(&sgs[1], buf, sg_buf_size);
 
 	cmd.opcode = VIRTIO_ADMIN_CMD_DEV_CTX_READ;
 	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
 	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
-	cmd.result_sg = &out_sg;
+	cmd.result_sg = sgs;
 	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
-
-	if (!ret) {
-		memcpy((u8*)&dev_ctx_rd_len,
-			cmd.command_specific_output,
-			sizeof(cmd.command_specific_output));
-		*rd_sz = le32_to_cpu(dev_ctx_rd_len.context_len);
+	if (ret) {
+		dev_err(&virtio_dev->dev,
+			"Failed to run command ret(%d)\n", ret);
+		goto out;
 	}
 
+	*rd_sz = le32_to_cpu(res->size);
+	*remaining_sz = le32_to_cpu(res->remaining_ctx_size);
+
+out:
+	if (res)
+		kfree(res);
 	return ret;
 }
 
 static int
 admin_unit_cmd_dev_ctx_rd_proc(uint8_t vf_idx)
 {
+	int ret = 0, buf_sz, rd_sz, remaining_sz;
 	struct pci_dev *vf_pdev;
-	int ret = 0, buf_sz, rd_sz;
 	u8 *buf;
 	char *str;
 
@@ -435,7 +457,8 @@ admin_unit_cmd_dev_ctx_rd_proc(uint8_t vf_idx)
 
 	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
 
-	ret = admin_unit_cmd_dev_ctx_rd(vf_pdev, buf, buf_sz, &rd_sz);
+	ret = admin_unit_cmd_dev_ctx_rd(vf_pdev, buf, buf_sz,
+					&rd_sz, &remaining_sz);
 	if (ret)
 		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
 			ret);
@@ -443,6 +466,7 @@ admin_unit_cmd_dev_ctx_rd_proc(uint8_t vf_idx)
 	str = (char*) buf;
 	pr_err("Dump out ret %d \n", ret);
 	pr_err("rd_sz = %#x \n", rd_sz);
+	pr_err("remaining_sz = %#x \n", remaining_sz);
 	pr_err("Dump out dev ctx \n");
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, buf,
 		       buf_sz, true);
