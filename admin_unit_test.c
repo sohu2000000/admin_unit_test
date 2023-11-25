@@ -59,6 +59,8 @@ struct dev_mgr_s {
 	int new_dev_mode_sz;
 	u8 *ctx_sz_res;
 	int ctx_sz_res_sz;
+	u8 *ctx_sprt_flds;
+	int ctx_sprt_flds_sz;
 };
 
 struct dev_mgr_s g_dev_mgr;
@@ -585,6 +587,85 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx, bool resume)
 	return ret;
 }
 
+static int
+admin_unit_cmd_sprt_field_query(struct pci_dev *pdev,
+				u8 *buf, int buf_size)
+{
+	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
+	struct scatterlist out_sg;
+	struct virtio_admin_cmd cmd = {};
+	int ret;
+
+	if (!virtio_dev)
+		return -ENOTCONN;
+
+	if (!pdev->is_virtfn)
+		pr_err("pdev should be a Virtual Function.\n");
+
+	dev_info(&pdev->dev, "Vf pdev(%s) domain %d bus %#x devfn %#x",
+		pci_name(pdev),
+		pci_domain_nr(pdev->bus),
+		pdev->bus->number, pdev->devfn);
+
+	dev_info(&virtio_dev->dev, "Use PF(%s) send cmd for VF id (%d)\n",
+		dev_name(&virtio_dev->dev),
+		pci_iov_vf_id(pdev));
+
+	sg_init_one(&out_sg, buf, buf_size);
+
+	cmd.opcode = VIRTIO_ADMIN_CMD_DEV_CTX_FIELDS_QUERY;
+	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
+	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
+	cmd.result_sg = &out_sg;
+
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+	return ret;
+}
+
+#define MAX_SUPPORT_FIELD	15
+static int
+admin_unit_cmd_sprt_field_query_proc(uint8_t vf_idx)
+{
+	struct virtio_admin_cmd_dev_ctx_supported_field *fld;
+	struct pci_dev *vf_pdev;
+	int ret = 0, i;
+
+	g_dev_mgr.ctx_sprt_flds_sz = MAX_SUPPORT_FIELD *
+			sizeof(struct virtio_admin_cmd_dev_ctx_supported_field);
+	if (!g_dev_mgr.ctx_sprt_flds) {
+		g_dev_mgr.ctx_sprt_flds =
+			kzalloc(g_dev_mgr.ctx_sprt_flds_sz, GFP_KERNEL);
+		if (!g_dev_mgr.ctx_sprt_flds) {
+			pr_err("Can not alloc support field buffer\n");
+			return -ENOMEM;
+		}
+	}
+
+	pr_err("%s:%d: exec supported field query on vf%d\n",
+						__func__, __LINE__, vf_idx);
+
+	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
+	ret = admin_unit_cmd_sprt_field_query(vf_pdev,
+					      g_dev_mgr.ctx_sprt_flds,
+					      g_dev_mgr.ctx_sprt_flds_sz);
+	if (ret)
+		pr_err("Failed to run admin_unit_cmd_sprt_field_query ret(%d)\n",
+			ret);
+
+	fld = (struct virtio_admin_cmd_dev_ctx_supported_field *)
+		g_dev_mgr.ctx_sprt_flds;
+
+	for (i = 0; i < MAX_SUPPORT_FIELD; i++) {
+		pr_err("supported_field[%d] type(%#x), length(%d)",
+			i, fld[i].type, fld[i].length);
+	}
+
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, g_dev_mgr.ctx_sprt_flds,
+		       g_dev_mgr.ctx_sprt_flds_sz, true);
+
+	return ret;
+}
+
 #define ADMIN_CMD_LIST_USE			"list_use"
 #define ADMIN_CMD_LIST_QUERY			"list_query"
 
@@ -610,6 +691,9 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx, bool resume)
 #define ADMIN_CMD_DEV_CTX_WR_VF1		"dev_ctx_wr_vf1"
 
 #define ADMIN_CMD_DISCARD_VF0			"dev_discard_vf0"
+
+#define ADMIN_CMD_FIELDS_QUERY_VF0		"dev_field_query_vf0"
+#define ADMIN_CMD_FIELDS_QUERY_VF1		"dev_field_query_vf1"
 
 static int admin_unit_cmd_process(const char *buf, int len)
 {
@@ -742,6 +826,20 @@ static int admin_unit_cmd_process(const char *buf, int len)
 
 	if (!strncmp(buf, ADMIN_CMD_DISCARD_VF0, strlen(ADMIN_CMD_DISCARD_VF0))) {
 		ret = admin_unit_cmd_dev_ctx_wr_proc(0, true);
+		if(ret)
+			pr_err("Failed to discard %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_FIELDS_QUERY_VF0, strlen(ADMIN_CMD_FIELDS_QUERY_VF0))) {
+		ret = admin_unit_cmd_sprt_field_query_proc(0);
+		if(ret)
+			pr_err("Failed to discard %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_FIELDS_QUERY_VF1, strlen(ADMIN_CMD_FIELDS_QUERY_VF1))) {
+		ret = admin_unit_cmd_sprt_field_query_proc(1);
 		if(ret)
 			pr_err("Failed to discard %d", ret);
 		return ret;
@@ -900,6 +998,8 @@ void __exit admin_unit_cleanup(void)
 		kfree(g_dev_mgr.vf0_ctx);
 	if (g_dev_mgr.vf1_ctx)
 		kfree(g_dev_mgr.vf1_ctx);
+	if (g_dev_mgr.ctx_sprt_flds)
+		kfree(g_dev_mgr.ctx_sprt_flds);
 }
 
 module_init(admin_unit_init);
