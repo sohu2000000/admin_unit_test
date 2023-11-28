@@ -666,6 +666,79 @@ admin_unit_cmd_sprt_field_query_proc(uint8_t vf_idx)
 	return ret;
 }
 
+static int
+admin_unit_cmd_discard(struct pci_dev *pdev)
+{
+	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
+	struct virtio_admin_cmd cmd = {};
+	int ret;
+
+	if (!virtio_dev)
+		return -ENOTCONN;
+
+	if (!pdev->is_virtfn)
+		pr_err("pdev should be a Virtual Function.\n");
+
+	dev_info(&pdev->dev, "Vf pdev(%s) domain %d bus %#x devfn %#x",
+		pci_name(pdev),
+		pci_domain_nr(pdev->bus),
+		pdev->bus->number, pdev->devfn);
+
+	dev_info(&virtio_dev->dev, "Use PF(%s) send cmd for VF id (%d)\n",
+		dev_name(&virtio_dev->dev),
+		pci_iov_vf_id(pdev));
+
+	cmd.opcode = VIRTIO_ADMIN_CMD_DEV_CTX_DISCARD;
+	cmd.group_type = VIRTIO_ADMIN_GROUP_TYPE_SRIOV;
+	cmd.group_member_id = pci_iov_vf_id(pdev) + 1;
+
+	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+	return ret;
+}
+
+static int
+admin_unit_cmd_discard_proc(uint8_t vf_idx)
+{
+	struct pci_dev *vf_pdev;
+	int ret = 0;
+
+	g_dev_mgr.ctx_sprt_flds_sz = MAX_SUPPORT_FIELD *
+			sizeof(struct virtio_admin_cmd_dev_ctx_supported_field);
+	if (!g_dev_mgr.ctx_sprt_flds) {
+		g_dev_mgr.ctx_sprt_flds =
+			kzalloc(g_dev_mgr.ctx_sprt_flds_sz, GFP_KERNEL);
+		if (!g_dev_mgr.ctx_sprt_flds) {
+			pr_err("Can not alloc support field buffer\n");
+			return -ENOMEM;
+		}
+	}
+
+	pr_err("%s:%d: exec supported field query on vf%d\n",
+						__func__, __LINE__, vf_idx);
+
+	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
+	ret = admin_unit_cmd_discard(vf_pdev);
+	if (ret)
+		pr_err("Failed to run admin_unit_cmd_sprt_field_query ret(%d)\n",
+			ret);
+
+	if (vf_idx == 0) {
+		if (g_dev_mgr.vf0_ctx)
+			kfree(g_dev_mgr.vf0_ctx);
+
+		g_dev_mgr.vf0_ctx = NULL;
+		g_dev_mgr.vf0_ctx_sz = 0;
+	} else {
+		if (g_dev_mgr.vf1_ctx)
+			kfree(g_dev_mgr.vf1_ctx);
+
+		g_dev_mgr.vf1_ctx = NULL;
+		g_dev_mgr.vf1_ctx_sz = 0;
+	}
+
+	return ret;
+}
+
 #define ADMIN_CMD_LIST_USE			"list_use"
 #define ADMIN_CMD_LIST_QUERY			"list_query"
 
@@ -691,6 +764,7 @@ admin_unit_cmd_sprt_field_query_proc(uint8_t vf_idx)
 #define ADMIN_CMD_DEV_CTX_WR_VF1		"dev_ctx_wr_vf1"
 
 #define ADMIN_CMD_DISCARD_VF0			"dev_discard_vf0"
+#define ADMIN_CMD_DISCARD_VF1			"dev_discard_vf1"
 
 #define ADMIN_CMD_FIELDS_QUERY_VF0		"dev_field_query_vf0"
 #define ADMIN_CMD_FIELDS_QUERY_VF1		"dev_field_query_vf1"
@@ -824,22 +898,29 @@ static int admin_unit_cmd_process(const char *buf, int len)
 		return ret;
 	}
 
-	if (!strncmp(buf, ADMIN_CMD_DISCARD_VF0, strlen(ADMIN_CMD_DISCARD_VF0))) {
-		ret = admin_unit_cmd_dev_ctx_wr_proc(0, true);
-		if(ret)
-			pr_err("Failed to discard %d", ret);
-		return ret;
-	}
-
 	if (!strncmp(buf, ADMIN_CMD_FIELDS_QUERY_VF0, strlen(ADMIN_CMD_FIELDS_QUERY_VF0))) {
 		ret = admin_unit_cmd_sprt_field_query_proc(0);
 		if(ret)
-			pr_err("Failed to discard %d", ret);
+			pr_err("Failed to supported fld query %d", ret);
 		return ret;
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_FIELDS_QUERY_VF1, strlen(ADMIN_CMD_FIELDS_QUERY_VF1))) {
 		ret = admin_unit_cmd_sprt_field_query_proc(1);
+		if(ret)
+			pr_err("Failed to supported fld query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DISCARD_VF0, strlen(ADMIN_CMD_DISCARD_VF0))) {
+		ret = admin_unit_cmd_discard_proc(0);
+		if(ret)
+			pr_err("Failed to discard %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DISCARD_VF1, strlen(ADMIN_CMD_DISCARD_VF1))) {
+		ret = admin_unit_cmd_discard_proc(1);
 		if(ret)
 			pr_err("Failed to discard %d", ret);
 		return ret;
