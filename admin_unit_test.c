@@ -47,10 +47,17 @@ struct dev_mgr_s {
 	struct pci_dev *pf_pdev;
 	struct pci_dev *vf0_pdev;
 	struct pci_dev *vf1_pdev;
+
 	int vf0_ctx_sz;
 	u8 *vf0_ctx;
+	int vf0_ctx_left;
+	u8 *vf0_ctx_pos;
+
 	int vf1_ctx_sz;
 	u8 *vf1_ctx;
+	int vf1_ctx_left;
+	u8 *vf1_ctx_pos;
+
 	u8 *op_list_buf;
 	int op_list_size;
 	u8 *dev_mode;
@@ -336,10 +343,16 @@ admin_unit_cmd_dev_ctx_sz_get_proc(uint8_t vf_idx, uint8_t freeze_mode)
 			ret);
 
 	res = (struct virtio_admin_cmd_dev_ctx_size_get_result *)g_dev_mgr.ctx_sz_res;
-	if (0 == vf_idx)
-		g_dev_mgr.vf0_ctx_sz = res->size;
-	else
-		g_dev_mgr.vf1_ctx_sz = res->size;
+	if (0 == vf_idx) {
+		if (!g_dev_mgr.vf0_ctx)
+			g_dev_mgr.vf0_ctx_sz = res->size;
+		g_dev_mgr.vf0_ctx_left = res->size;
+	}
+	else {
+		if (!g_dev_mgr.vf1_ctx)
+			g_dev_mgr.vf1_ctx_sz = res->size;
+		g_dev_mgr.vf1_ctx_left = res->size;
+	}
 
 	pr_err("Dump out ret %d \n", ret);
 	pr_err(" ctx size = %#llx \n", res->size);
@@ -476,6 +489,93 @@ admin_unit_cmd_dev_ctx_rd_proc(uint8_t vf_idx)
 	return ret;
 }
 
+static int
+admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
+{
+	int ret = 0, buf_sz, rd_sz, remaining_sz, total_sz;
+	struct pci_dev *vf_pdev;
+	u8 *buf, *total_buf;
+
+	if (vf_idx == 0) {
+		if (!g_dev_mgr.vf0_ctx_left){
+			pr_err("Should read ctx sz first");
+			return -EINVAL;
+		}
+
+		if(!g_dev_mgr.vf0_ctx) {
+			g_dev_mgr.vf0_ctx =
+				kzalloc(g_dev_mgr.vf0_ctx_sz, GFP_KERNEL);
+			if (!g_dev_mgr.vf0_ctx) {
+				pr_err("Can not alloc memory \n");
+				return -ENOMEM;
+			}
+			g_dev_mgr.vf0_ctx_pos = g_dev_mgr.vf0_ctx;
+		}
+
+		total_buf = g_dev_mgr.vf0_ctx;
+		total_sz = g_dev_mgr.vf0_ctx_sz;
+
+		buf = g_dev_mgr.vf0_ctx_pos;
+		buf_sz = g_dev_mgr.vf0_ctx_left;
+
+	} else {
+		if (!g_dev_mgr.vf1_ctx_left){
+			pr_err("Should read ctx sz first");
+			return -EINVAL;
+		}
+
+		if(!g_dev_mgr.vf1_ctx) {
+			g_dev_mgr.vf1_ctx =
+				kzalloc(g_dev_mgr.vf1_ctx_sz, GFP_KERNEL);
+			if (!g_dev_mgr.vf1_ctx) {
+				pr_err("Can not alloc memory \n");
+				return -ENOMEM;
+			}
+			g_dev_mgr.vf1_ctx_pos = g_dev_mgr.vf1_ctx;
+		}
+
+		total_buf = g_dev_mgr.vf1_ctx;
+		total_sz = g_dev_mgr.vf1_ctx_sz;
+
+		buf = g_dev_mgr.vf1_ctx_pos;
+		buf_sz = g_dev_mgr.vf1_ctx_left;
+	}
+
+	if (!left)
+		buf_sz = sz;
+
+	pr_err("%s:%d: exec dev ctx read %d byte \n",__func__, __LINE__, buf_sz);
+
+	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
+
+	ret = admin_unit_cmd_dev_ctx_rd(vf_pdev, buf, buf_sz,
+					&rd_sz, &remaining_sz);
+	if (ret)
+		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
+			ret);
+
+	if (vf_idx == 0) {
+		g_dev_mgr.vf0_ctx_pos += buf_sz;
+		g_dev_mgr.vf0_ctx_left -= buf_sz;
+		pr_err("vf0_ctx_left = %#x \n", g_dev_mgr.vf0_ctx_left);
+	} else {
+		g_dev_mgr.vf1_ctx_pos += buf_sz;
+		g_dev_mgr.vf1_ctx_left -= buf_sz;
+		pr_err("vf1_ctx_left = %#x \n", g_dev_mgr.vf1_ctx_left);
+	}
+
+	pr_err("Dump out ret %d \n", ret);
+	pr_err("rd_sz = %#x \n", rd_sz);
+	pr_err("remaining_sz = %#x \n", remaining_sz);
+	pr_err("Dump out part dev ctx \n");
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, buf,
+		       buf_sz, true);
+
+	pr_err("===== Dump out dev ctx ======== \n");
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, total_buf,
+		       total_sz, true);
+	return ret;
+}
 
 static int
 admin_unit_cmd_dev_ctx_wr(struct pci_dev *pdev, u8 *buf, int buf_size)
@@ -700,12 +800,14 @@ admin_unit_cmd_discard_proc(uint8_t vf_idx)
 			kfree(g_dev_mgr.vf0_ctx);
 
 		g_dev_mgr.vf0_ctx = NULL;
+		g_dev_mgr.vf0_ctx_pos = NULL;
 		g_dev_mgr.vf0_ctx_sz = 0;
 	} else {
 		if (g_dev_mgr.vf1_ctx)
 			kfree(g_dev_mgr.vf1_ctx);
 
 		g_dev_mgr.vf1_ctx = NULL;
+		g_dev_mgr.vf1_ctx_pos = NULL;
 		g_dev_mgr.vf1_ctx_sz = 0;
 	}
 
@@ -732,6 +834,12 @@ admin_unit_cmd_discard_proc(uint8_t vf_idx)
 
 #define ADMIN_CMD_DEV_CTX_RD_VF0		"dev_ctx_rd_vf0"
 #define ADMIN_CMD_DEV_CTX_RD_VF1		"dev_ctx_rd_vf1"
+
+#define ADMIN_CMD_DEV_CTX_RD_200B_VF0		"dev_ctx_rd_200B_vf0"
+#define ADMIN_CMD_DEV_CTX_RD_200B_VF1		"dev_ctx_rd_200B_vf1"
+
+#define ADMIN_CMD_DEV_CTX_RD_LEFT_VF0		"dev_ctx_rd_left_vf0"
+#define ADMIN_CMD_DEV_CTX_RD_LEFT_VF1		"dev_ctx_rd_left_vf1"
 
 #define ADMIN_CMD_DEV_CTX_WR_VF0		"dev_ctx_wr_vf0"
 #define ADMIN_CMD_DEV_CTX_WR_VF1		"dev_ctx_wr_vf1"
@@ -852,6 +960,34 @@ static int admin_unit_cmd_process(const char *buf, int len)
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_VF1, strlen(ADMIN_CMD_DEV_CTX_RD_VF1))) {
 		ret = admin_unit_cmd_dev_ctx_rd_proc(1);
+		if(ret)
+			pr_err("Failed to run list query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_200B_VF0, strlen(ADMIN_CMD_DEV_CTX_RD_200B_VF0))) {
+		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(0, 200, false);
+		if(ret)
+			pr_err("Failed to run list query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_200B_VF1, strlen(ADMIN_CMD_DEV_CTX_RD_200B_VF1))) {
+		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(1, 200, false);
+		if(ret)
+			pr_err("Failed to run list query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_LEFT_VF0, strlen(ADMIN_CMD_DEV_CTX_RD_LEFT_VF0))) {
+		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(0, 200, true);
+		if(ret)
+			pr_err("Failed to run list query %d", ret);
+		return ret;
+	}
+
+	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_LEFT_VF1, strlen(ADMIN_CMD_DEV_CTX_RD_LEFT_VF1))) {
+		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(1, 200, true);
 		if(ret)
 			pr_err("Failed to run list query %d", ret);
 		return ret;
@@ -1054,6 +1190,9 @@ void __exit admin_unit_cleanup(void)
 		kfree(g_dev_mgr.vf1_ctx);
 	if (g_dev_mgr.ctx_sprt_flds)
 		kfree(g_dev_mgr.ctx_sprt_flds);
+
+	g_dev_mgr.vf0_ctx_pos = NULL;
+	g_dev_mgr.vf1_ctx_pos = NULL;
 }
 
 module_init(admin_unit_init);
