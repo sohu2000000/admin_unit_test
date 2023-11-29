@@ -70,6 +70,12 @@ struct dev_mgr_s {
 	int ctx_sprt_flds_sz;
 };
 
+struct __packed virtio_admin_cmd_dev_ctx_supported_field {
+	__le16 type;
+	__u8 reserved[2];
+	__le32 length;
+};
+
 struct dev_mgr_s g_dev_mgr;
 
 static int admin_unit_cmd_proc_show(struct seq_file *m, void *v)
