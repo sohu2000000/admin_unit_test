@@ -484,6 +484,15 @@ admin_unit_cmd_dev_ctx_rd_proc(uint8_t vf_idx)
 		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
 			ret);
 
+	if (vf_idx == 0) {
+		g_dev_mgr.vf0_ctx_pos = g_dev_mgr.vf0_ctx;
+		g_dev_mgr.vf0_ctx_left = g_dev_mgr.vf0_ctx_sz;
+	} else {
+
+		g_dev_mgr.vf1_ctx_pos = g_dev_mgr.vf1_ctx;
+		g_dev_mgr.vf1_ctx_left = g_dev_mgr.vf1_ctx_sz;
+	}
+
 	str = (char*) buf;
 	pr_err("Dump out ret %d \n", ret);
 	pr_err("rd_sz = %#x \n", rd_sz);
@@ -518,9 +527,6 @@ admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
 			g_dev_mgr.vf0_ctx_pos = g_dev_mgr.vf0_ctx;
 		}
 
-		total_buf = g_dev_mgr.vf0_ctx;
-		total_sz = g_dev_mgr.vf0_ctx_sz;
-
 		buf = g_dev_mgr.vf0_ctx_pos;
 		buf_sz = g_dev_mgr.vf0_ctx_left;
 
@@ -539,9 +545,6 @@ admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
 			}
 			g_dev_mgr.vf1_ctx_pos = g_dev_mgr.vf1_ctx;
 		}
-
-		total_buf = g_dev_mgr.vf1_ctx;
-		total_sz = g_dev_mgr.vf1_ctx_sz;
 
 		buf = g_dev_mgr.vf1_ctx_pos;
 		buf_sz = g_dev_mgr.vf1_ctx_left;
@@ -570,6 +573,25 @@ admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
 		pr_err("vf1_ctx_left = %#x \n", g_dev_mgr.vf1_ctx_left);
 	}
 
+	/* reset after read all */
+	if(left) {
+		if (vf_idx == 0) {
+			g_dev_mgr.vf0_ctx_pos = g_dev_mgr.vf0_ctx;
+			g_dev_mgr.vf0_ctx_left = g_dev_mgr.vf0_ctx_sz;
+
+			total_buf = g_dev_mgr.vf0_ctx_pos;
+			total_sz = g_dev_mgr.vf0_ctx_left;
+		} else {
+
+			g_dev_mgr.vf1_ctx_pos = g_dev_mgr.vf1_ctx;
+			g_dev_mgr.vf1_ctx_left = g_dev_mgr.vf1_ctx_sz;
+
+			total_buf = g_dev_mgr.vf1_ctx;
+			total_sz = g_dev_mgr.vf1_ctx_sz;
+
+		}
+	}
+
 	pr_err("Dump out ret %d \n", ret);
 	pr_err("rd_sz = %#x \n", rd_sz);
 	pr_err("remaining_sz = %#x \n", remaining_sz);
@@ -577,9 +599,12 @@ admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, buf,
 		       buf_sz, true);
 
-	pr_err("===== Dump out dev ctx ======== \n");
-	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, total_buf,
-		       total_sz, true);
+	if(left) {
+		pr_err("===== Dump out dev ctx ======== \n");
+		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, total_buf,
+			       total_sz, true);
+	}
+
 	return ret;
 }
 
@@ -774,7 +799,7 @@ admin_unit_cmd_dev_ctx_wr_partial_proc(uint8_t vf_idx, int sz, bool left)
 		}
 		buf_sz = g_dev_mgr.vf1_ctx_sz;
 
-		g_dev_mgr.vf1_ctx_pos
+		// g_dev_mgr.vf1_ctx_pos;
 		g_dev_mgr.vf1_ctx = NULL;
 		g_dev_mgr.vf1_ctx_sz = 0;
 	} else {
@@ -1126,28 +1151,28 @@ static int admin_unit_cmd_process(const char *buf, int len)
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_LEFT_VF0, strlen(ADMIN_CMD_DEV_CTX_RD_LEFT_VF0))) {
 		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(0, 200, true);
 		if(ret)
-			pr_err("Failed to run list query %d", ret);
+			pr_err("Failed to run rd 200 on vf0 %d", ret);
 		return ret;
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_RD_LEFT_VF1, strlen(ADMIN_CMD_DEV_CTX_RD_LEFT_VF1))) {
 		ret = admin_unit_cmd_dev_ctx_rd_partial_proc(1, 200, true);
 		if(ret)
-			pr_err("Failed to run list query %d", ret);
+			pr_err("Failed to run rd 200 on vf1 %d", ret);
 		return ret;
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_WR_VF0, strlen(ADMIN_CMD_DEV_CTX_WR_VF0))) {
 		ret = admin_unit_cmd_dev_ctx_wr_proc(0);
 		if(ret)
-			pr_err("Failed to run list query %d", ret);
+			pr_err("Failed to run rd left on vf0 %d", ret);
 		return ret;
 	}
 
 	if (!strncmp(buf, ADMIN_CMD_DEV_CTX_WR_VF1, strlen(ADMIN_CMD_DEV_CTX_WR_VF1))) {
 		ret = admin_unit_cmd_dev_ctx_wr_proc(1);
 		if(ret)
-			pr_err("Failed to run list query %d", ret);
+			pr_err("Failed to run rd left on vf1 %d", ret);
 		return ret;
 	}
 
