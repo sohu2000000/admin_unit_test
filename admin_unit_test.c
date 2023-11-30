@@ -666,6 +666,8 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 
 		g_dev_mgr.vf1_ctx = NULL;
 		g_dev_mgr.vf1_ctx_sz = 0;
+		g_dev_mgr.vf1_ctx_pos = NULL;
+		g_dev_mgr.vf1_ctx_left = 0;
 	} else {
 		buf = g_dev_mgr.vf0_ctx;
 		if (!buf){
@@ -676,6 +678,8 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 
 		g_dev_mgr.vf0_ctx = NULL;
 		g_dev_mgr.vf0_ctx_sz = 0;
+		g_dev_mgr.vf0_ctx_pos = NULL;
+		g_dev_mgr.vf0_ctx_left = 0;
 	}
 
 	pr_err("%s:%d: exec dev ctx write \n",__func__, __LINE__);
@@ -690,132 +694,56 @@ admin_unit_cmd_dev_ctx_wr_proc(uint8_t vf_idx)
 	kfree(buf);
 	return ret;
 }
-
-#if 0
-static int
-admin_unit_cmd_dev_ctx_rd_partial_proc(uint8_t vf_idx, int sz, bool left)
-{
-	int ret = 0, buf_sz, rd_sz, remaining_sz, total_sz;
-	struct pci_dev *vf_pdev;
-	u8 *buf, *total_buf;
-
-	if (vf_idx == 0) {
-		if (!g_dev_mgr.vf0_ctx_left){
-			pr_err("Should read ctx sz first");
-			return -EINVAL;
-		}
-
-		if(!g_dev_mgr.vf0_ctx) {
-			g_dev_mgr.vf0_ctx =
-				kzalloc(g_dev_mgr.vf0_ctx_sz, GFP_KERNEL);
-			if (!g_dev_mgr.vf0_ctx) {
-				pr_err("Can not alloc memory \n");
-				return -ENOMEM;
-			}
-			g_dev_mgr.vf0_ctx_pos = g_dev_mgr.vf0_ctx;
-		}
-
-		total_buf = g_dev_mgr.vf0_ctx;
-		total_sz = g_dev_mgr.vf0_ctx_sz;
-
-		buf = g_dev_mgr.vf0_ctx_pos;
-		buf_sz = g_dev_mgr.vf0_ctx_left;
-
-	} else {
-		if (!g_dev_mgr.vf1_ctx_left){
-			pr_err("Should read ctx sz first");
-			return -EINVAL;
-		}
-
-		if(!g_dev_mgr.vf1_ctx) {
-			g_dev_mgr.vf1_ctx =
-				kzalloc(g_dev_mgr.vf1_ctx_sz, GFP_KERNEL);
-			if (!g_dev_mgr.vf1_ctx) {
-				pr_err("Can not alloc memory \n");
-				return -ENOMEM;
-			}
-			g_dev_mgr.vf1_ctx_pos = g_dev_mgr.vf1_ctx;
-		}
-
-		total_buf = g_dev_mgr.vf1_ctx;
-		total_sz = g_dev_mgr.vf1_ctx_sz;
-
-		buf = g_dev_mgr.vf1_ctx_pos;
-		buf_sz = g_dev_mgr.vf1_ctx_left;
-	}
-
-	if (!left)
-		buf_sz = sz;
-
-	pr_err("%s:%d: exec dev ctx read %d byte \n",__func__, __LINE__, buf_sz);
-
-	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
-
-	ret = admin_unit_cmd_dev_ctx_rd(vf_pdev, buf, buf_sz,
-					&rd_sz, &remaining_sz);
-	if (ret)
-		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
-			ret);
-
-	if (vf_idx == 0) {
-		g_dev_mgr.vf0_ctx_pos += buf_sz;
-		g_dev_mgr.vf0_ctx_left -= buf_sz;
-		pr_err("vf0_ctx_left = %#x \n", g_dev_mgr.vf0_ctx_left);
-	} else {
-		g_dev_mgr.vf1_ctx_pos += buf_sz;
-		g_dev_mgr.vf1_ctx_left -= buf_sz;
-		pr_err("vf1_ctx_left = %#x \n", g_dev_mgr.vf1_ctx_left);
-	}
-
-	pr_err("Dump out ret %d \n", ret);
-	pr_err("rd_sz = %#x \n", rd_sz);
-	pr_err("remaining_sz = %#x \n", remaining_sz);
-	pr_err("Dump out part dev ctx \n");
-	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, buf,
-		       buf_sz, true);
-
-	pr_err("===== Dump out dev ctx ======== \n");
-	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, total_buf,
-		       total_sz, true);
-	return ret;
-}
-#endif
-
 
 static int
 admin_unit_cmd_dev_ctx_wr_partial_proc(uint8_t vf_idx, int sz, bool left)
 {
-	// char *str = "Hello Conrtroller, I am godfeng";
 	struct pci_dev *vf_pdev;
 	int ret = 0, buf_sz;
-	u8 *buf;
+	u8 *buf, *total_buf;
 
 	if (vf_idx == 0) {
-
-		buf = g_dev_mgr.vf1_ctx;
+		buf = g_dev_mgr.vf1_ctx_pos;
 		if (!buf){
 			pr_err("Should read vf1 dev ctx first");
 			return -EINVAL;
 		}
-		buf_sz = g_dev_mgr.vf1_ctx_sz;
+		if (left) {
+			buf_sz = g_dev_mgr.vf1_ctx_left;
+			total_buf = g_dev_mgr.vf1_ctx;
 
-		// g_dev_mgr.vf1_ctx_pos;
-		g_dev_mgr.vf1_ctx = NULL;
-		g_dev_mgr.vf1_ctx_sz = 0;
+			g_dev_mgr.vf1_ctx = NULL;
+			g_dev_mgr.vf1_ctx_pos = NULL;
+			g_dev_mgr.vf1_ctx_left = 0;
+			g_dev_mgr.vf1_ctx_sz = 0;
+		} else {
+			buf_sz = sz;
+			g_dev_mgr.vf1_ctx_pos += sz;
+			g_dev_mgr.vf1_ctx_left -= sz;
+		}
 	} else {
-		buf = g_dev_mgr.vf0_ctx;
+		buf = g_dev_mgr.vf0_ctx_pos;
 		if (!buf){
 			pr_err("Should read vf0 dev ctx first");
 			return -EINVAL;
 		}
-		buf_sz = g_dev_mgr.vf0_ctx_sz;
+		if (left) {
+			buf_sz = g_dev_mgr.vf0_ctx_left;
+			total_buf = g_dev_mgr.vf0_ctx;
 
-		g_dev_mgr.vf0_ctx = NULL;
-		g_dev_mgr.vf0_ctx_sz = 0;
+			g_dev_mgr.vf0_ctx = NULL;
+			g_dev_mgr.vf0_ctx_pos = NULL;
+			g_dev_mgr.vf0_ctx_left = 0;
+			g_dev_mgr.vf0_ctx_sz = 0;
+		} else {
+			buf_sz = sz;
+			g_dev_mgr.vf0_ctx_pos += sz;
+			g_dev_mgr.vf0_ctx_left -= sz;
+		}
 	}
 
-	pr_err("%s:%d: exec dev ctx write \n",__func__, __LINE__);
-	// memcpy(buf, str, strlen(str) + 1);
+	pr_err("%s:%d: exec dev ctx write %d bytes on vf%d\n",
+		__func__, __LINE__, buf_sz, vf_idx);
 
 	vf_pdev = vf_idx == 0 ? g_dev_mgr.vf0_pdev : g_dev_mgr.vf1_pdev;
 	ret = admin_unit_cmd_dev_ctx_wr(vf_pdev, buf, buf_sz);
@@ -823,7 +751,8 @@ admin_unit_cmd_dev_ctx_wr_partial_proc(uint8_t vf_idx, int sz, bool left)
 		pr_err("Failed to run admin_unit_cmd_dev_ctx_rd ret(%d)\n",
 			ret);
 
-	kfree(buf);
+	if (left)
+		kfree(total_buf);
 	return ret;
 }
 
@@ -1008,8 +937,8 @@ admin_unit_cmd_discard_proc(uint8_t vf_idx)
 
 #define ADMIN_CMD_DEV_CTX_WR_VF0		"dev_ctx_wr_vf0"
 #define ADMIN_CMD_DEV_CTX_WR_VF1		"dev_ctx_wr_vf1"
-#define ADMIN_CMD_DEV_CTX_WR_200B_VF0		"dev_ctx_rd_200B_vf0"
-#define ADMIN_CMD_DEV_CTX_WR_200B_VF1		"dev_ctx_rd_200B_vf1"
+#define ADMIN_CMD_DEV_CTX_WR_200B_VF0		"dev_ctx_wr_200B_vf0"
+#define ADMIN_CMD_DEV_CTX_WR_200B_VF1		"dev_ctx_wr_200B_vf1"
 #define ADMIN_CMD_DEV_CTX_WR_LEFT_VF0		"dev_ctx_wr_left_vf0"
 #define ADMIN_CMD_DEV_CTX_WR_LEFT_VF1		"dev_ctx_wr_left_vf1"
 
