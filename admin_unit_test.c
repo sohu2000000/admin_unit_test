@@ -31,6 +31,9 @@
 #include <linux/virtio_pci.h>
 #include <linux/pci.h>
 
+/* Increment MAX_OPCODE to next value when new opcode is added */
+#define VIRTIO_ADMIN_MAX_CMD_OPCODE			0x11
+
 static struct proc_dir_entry *admin_unit_dir = NULL;
 
 MODULE_AUTHOR("Feng Liu <feliu@nvidia.com>");
