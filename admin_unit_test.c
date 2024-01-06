@@ -894,21 +894,21 @@ admin_unit_cmd_discard_proc(uint8_t vf_idx)
 		pr_err("Failed to run admin_unit_cmd_sprt_field_query ret(%d)\n",
 			ret);
 
-	if (vf_idx == 0) {
-		if (g_dev_mgr.vf0_ctx)
-			kfree(g_dev_mgr.vf0_ctx);
+	// if (vf_idx == 0) {
+	// 	if (g_dev_mgr.vf0_ctx)
+	// 		kfree(g_dev_mgr.vf0_ctx);
 
-		g_dev_mgr.vf0_ctx = NULL;
-		g_dev_mgr.vf0_ctx_pos = NULL;
-		g_dev_mgr.vf0_ctx_sz = 0;
-	} else {
-		if (g_dev_mgr.vf1_ctx)
-			kfree(g_dev_mgr.vf1_ctx);
+	// 	g_dev_mgr.vf0_ctx = NULL;
+	// 	g_dev_mgr.vf0_ctx_pos = NULL;
+	// 	g_dev_mgr.vf0_ctx_sz = 0;
+	// } else {
+	// 	if (g_dev_mgr.vf1_ctx)
+	// 		kfree(g_dev_mgr.vf1_ctx);
 
-		g_dev_mgr.vf1_ctx = NULL;
-		g_dev_mgr.vf1_ctx_pos = NULL;
-		g_dev_mgr.vf1_ctx_sz = 0;
-	}
+	// 	g_dev_mgr.vf1_ctx = NULL;
+	// 	g_dev_mgr.vf1_ctx_pos = NULL;
+	// 	g_dev_mgr.vf1_ctx_sz = 0;
+	// }
 
 	return ret;
 }
