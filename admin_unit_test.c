@@ -1264,6 +1264,9 @@ void admin_unit_prepare_dev(void)
 	pdev = pci_get_domain_bus_and_slot(domain, bus_num,
 					   PCI_DEVFN(device, function));
 	if (pdev) {
+		/* VF1 is a fake device , dont repsonse cci and cvq*/
+		struct virtio_device *vdev = virtio_pci_dev_get_vdev(pdev);
+		vdev->ignore_cvq = true;
 		dev_info(&pdev->dev,
 			"godfeng vf1 pdev(%s) domain %d bus %#x devfn %#x",
 			pci_name(pdev),
