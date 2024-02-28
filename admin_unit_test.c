@@ -1224,7 +1224,7 @@ void admin_unit_prepare_dev(void)
 
 	/* PF */
 	domain = 0x0;
-	bus_num = 0x83;
+	bus_num = 0x81;
 	device = 0x0;
 	function = 0x1;
 	pdev = pci_get_domain_bus_and_slot(domain, bus_num,
@@ -1241,8 +1241,8 @@ void admin_unit_prepare_dev(void)
 
 	/* VF0 */
 	domain = 0x0;
-	bus_num = 0x83;
-	device = 0x2;
+	bus_num = 0x81;
+	device = 0x0;
 	function = 0x3;
 	pdev = pci_get_domain_bus_and_slot(domain, bus_num,
 					   PCI_DEVFN(device, function));
@@ -1258,8 +1258,8 @@ void admin_unit_prepare_dev(void)
 
 	/* VF1 */
 	domain = 0x0;
-	bus_num = 0x83;
-	device = 0x2;
+	bus_num = 0x81;
+	device = 0x0;
 	function = 0x4;
 	pdev = pci_get_domain_bus_and_slot(domain, bus_num,
 					   PCI_DEVFN(device, function));
